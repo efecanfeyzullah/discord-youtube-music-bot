@@ -1,6 +1,10 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from YouTubeToMP3.downloader import download
+import os
+import requests
+import time
 
 TOKEN = "NzY4ODI1NzkzOTA3MjYxNDcw.GFEgvD.cKJ2_HsuoIXr732_yTVoHp1VeB9ajO95ZHycE4"
 
@@ -52,7 +56,7 @@ async def leave(interaction: discord.Interaction):
         await interaction.response.send_message("Not connected to a channel.")
 
 @bot.tree.command(name='play')
-async def play(interaction: discord.Interaction, name: str):
+async def play(interaction: discord.Interaction, q: str):
     message_response = ""
 
     # Join to channel if not joined
@@ -63,9 +67,29 @@ async def play(interaction: discord.Interaction, name: str):
         else:
             message_response = "You must connect to a voice channel before using this command."
             return
+
+    API_URL = "https://youtube.googleapis.com/youtube/v3/"
+    query = q.replace(" ", "%20")
+    response = requests.get(f"{API_URL}search?q={query}&key=AIzaSyCHs90TcJXpXR-KZWYNXRLUKmBIEF0LO-8")
+    video_id = response.json()["items"][0]["id"]["videoId"]
+        
+    await interaction.response.send_message(message_response + f"\nDownloading...")
+
+    files = os.listdir(".")
+    for file in files:
+        if file.endswith(".mp3"):
+            os.remove(file)
+
+    download(f"https://www.youtube.com/watch?v={video_id}")
     
+    song_name = ""
+    for file in files:
+        if file.endswith(".mp3"):
+            song_name = file
+            break
+
     # Play mp3
-    interaction.guild.voice_client.play(source=discord.FFmpegPCMAudio(source=name))
-    await interaction.response.send_message(message_response + "\nPlaying...")
+    await interaction.channel.send(f"Playing {song_name.removesuffix('.mp3')}...")
+    interaction.guild.voice_client.play(source=discord.FFmpegPCMAudio(source=song_name))
 
 bot.run(TOKEN)
