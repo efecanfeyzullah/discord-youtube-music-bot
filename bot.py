@@ -73,7 +73,7 @@ async def play(interaction: discord.Interaction, q: str):
     response = requests.get(f"{API_URL}search?q={query}&key=AIzaSyCHs90TcJXpXR-KZWYNXRLUKmBIEF0LO-8")
     video_id = response.json()["items"][0]["id"]["videoId"]
         
-    await interaction.response.send_message(message_response + f"\nDownloading...")
+    await interaction.response.send_message(message_response + f"\nPlaying...")
 
     files = os.listdir(".")
     for file in files:
@@ -89,7 +89,6 @@ async def play(interaction: discord.Interaction, q: str):
             break
 
     # Play mp3
-    await interaction.channel.send(f"Playing {song_name.removesuffix('.mp3')}...")
     interaction.guild.voice_client.play(source=discord.FFmpegPCMAudio(source=song_name))
 
 bot.run(TOKEN)
