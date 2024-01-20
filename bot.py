@@ -1,10 +1,11 @@
+import os
 import discord
 from discord import app_commands
 from discord.ext import commands
-from YouTubeToMP3.downloader import download
-import os
-import requests
 import time
+from YouTubeToMP3.downloader import download
+import requests
+import tarfile
 
 TOKEN = "NzY4ODI1NzkzOTA3MjYxNDcw.GFEgvD.cKJ2_HsuoIXr732_yTVoHp1VeB9ajO95ZHycE4"
 
@@ -73,7 +74,7 @@ async def play(interaction: discord.Interaction, q: str):
     response = requests.get(f"{API_URL}search?q={query}&key=AIzaSyCHs90TcJXpXR-KZWYNXRLUKmBIEF0LO-8")
     video_id = response.json()["items"][0]["id"]["videoId"]
         
-    await interaction.response.send_message(message_response + f"\nPlaying...")
+    await interaction.response.send_message(message_response + f"\nDownloading...")
 
     files = os.listdir(".")
     for file in files:
@@ -81,14 +82,16 @@ async def play(interaction: discord.Interaction, q: str):
             os.remove(file)
 
     download(f"https://www.youtube.com/watch?v={video_id}")
-    
+
     song_name = ""
+    files = os.listdir(".")
     for file in files:
         if file.endswith(".mp3"):
             song_name = file
             break
-
+    
     # Play mp3
+    await interaction.channel.send(f"Playing {song_name.removesuffix('.mp3')}...")
     interaction.guild.voice_client.play(source=discord.FFmpegPCMAudio(source=song_name))
 
 bot.run(TOKEN)
