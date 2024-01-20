@@ -104,7 +104,6 @@ async def stop(interaction: discord.Interaction):
             message_response = "Stopped the player.\n"
         await interaction.guild.voice_client.disconnect()   # Disconnect
         message_response += "Left the channel."
-        await interaction.response.send_message(message_response)
     else:
         message_response = "Not connected to a voice channel."
 
