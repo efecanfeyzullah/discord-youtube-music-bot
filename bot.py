@@ -54,7 +54,7 @@ async def leave(interaction: discord.Interaction):
         await interaction.guild.voice_client.disconnect()
         await interaction.response.send_message("Left the channel.")
     else:
-        await interaction.response.send_message("Not connected to a channel.")
+        await interaction.response.send_message("Not connected to a voice channel.")
 
 @bot.tree.command(name='play')
 async def play(interaction: discord.Interaction, q: str):
@@ -93,5 +93,21 @@ async def play(interaction: discord.Interaction, q: str):
     # Play mp3
     await interaction.channel.send(f"Playing {song_name.removesuffix('.mp3')}...")
     interaction.guild.voice_client.play(source=discord.FFmpegPCMAudio(source=song_name))
+
+@bot.tree.command(name='stop')
+async def stop(interaction: discord.Interaction):
+    message_response = ""
+
+    if interaction.guild.voice_client:  # Check if bot is inside a voice channel
+        if interaction.guild.voice_client.is_playing(): # Stop the player if it is playing something
+            interaction.guild.voice_client.stop()
+            message_response = "Stopped the player.\n"
+        await interaction.guild.voice_client.disconnect()   # Disconnect
+        message_response += "Left the channel."
+        await interaction.response.send_message(message_response)
+    else:
+        message_response = "Not connected to a voice channel."
+
+    await interaction.response.send_message(message_response)
 
 bot.run(TOKEN)
