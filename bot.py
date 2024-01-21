@@ -1,15 +1,46 @@
 import os
 import discord
-from discord import app_commands
 from discord.ext import commands
-import time
 from YouTubeToMP3.downloader import download
 import requests
-import tarfile
+from pytube import YouTube
+from threading import Thread, Event
+import asyncio
 
 TOKEN = "NzY4ODI1NzkzOTA3MjYxNDcw.GFEgvD.cKJ2_HsuoIXr732_yTVoHp1VeB9ajO95ZHycE4"
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+
+timer = Event()
+player_running = True
+song_queue = []
+song_lengths = []
+voice_client = None
+def get_video_title(video_url):
+    return YouTube(video_url).title
+def get_video_length(video_url):
+    return YouTube(video_url).length
+
+def player():
+    global timer
+    global voice_client
+
+    while player_running:
+        if len(song_queue) > 0: # Check if there are songs in the queue
+            # Play the first song in the queue
+            voice_client.play(source=discord.FFmpegPCMAudio(source=song_queue[0] + ".mp3"))
+
+            # Wait for it to finish
+            if timer.wait(timeout=song_lengths[0] + 1): # Event is set
+                timer.clear()   # Clear the event to make it waitable
+            else:   # Timeout occured, go to next song
+                # Pop the played song
+                previous_song = song_queue[0]
+                song_queue.pop(0)
+                song_lengths.pop(0)
+
+                if previous_song not in song_queue: # Check if previous song still in the queue
+                    os.remove(previous_song + ".mp3") # Delete previous mp3 from the system
 
 @bot.event
 async def on_ready():
@@ -27,18 +58,10 @@ async def on_ready():
 
     print("Mercarb Mekani is in " + str(guild_count) + " guilds.")
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-    
-    return
-
-    response = "Annen"
-    await message.channel.send(response)
-
 @bot.tree.command(name='join')
 async def join(interaction: discord.Interaction):
+    global voice_client
+
     if interaction.guild.voice_client:  # Check if already connected
         await interaction.response.send_message("Already connected to a voice channel.")
     else:
@@ -47,18 +70,30 @@ async def join(interaction: discord.Interaction):
             await interaction.response.send_message("Joined to " + interaction.user.voice.channel.name + ".")
         else:
             await interaction.response.send_message("You must connect to a voice channel before using this command.")
+
+    # Set voice client
+    voice_client = interaction.guild.voice_client
     
 @bot.tree.command(name='leave')
 async def leave(interaction: discord.Interaction):
+    global voice_client
+
     if interaction.guild.voice_client:  # Check if bot is inside a voice channel
         await interaction.guild.voice_client.disconnect()
         await interaction.response.send_message("Left the channel.")
     else:
         await interaction.response.send_message("Not connected to a voice channel.")
 
+    # Clear voice client
+    voice_client = None
+
 @bot.tree.command(name='play')
 async def play(interaction: discord.Interaction, q: str):
+    global voice_client
+
     message_response = ""
+
+    await interaction.response.defer()
 
     # Join to channel if not joined
     if interaction.guild.voice_client == None:  # Check if not already connected
@@ -68,35 +103,48 @@ async def play(interaction: discord.Interaction, q: str):
         else:
             message_response = "You must connect to a voice channel before using this command."
             return
+    
+    # Set voice client
+    voice_client = interaction.guild.voice_client
 
+    # Get video id and link
     API_URL = "https://youtube.googleapis.com/youtube/v3/"
     query = q.replace(" ", "%20")
     response = requests.get(f"{API_URL}search?q={query}&key=AIzaSyCHs90TcJXpXR-KZWYNXRLUKmBIEF0LO-8")
     video_id = response.json()["items"][0]["id"]["videoId"]
-        
-    await interaction.response.send_message(message_response + f"\nDownloading...")
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    files = os.listdir(".")
+    video_title = get_video_title(video_url)   # Get video title
+
+    # Chech if mp3 file exists already
+    mp3_exists = False
+    files = files = os.listdir(".")
     for file in files:
-        if file.endswith(".mp3"):
-            os.remove(file)
+        if file == video_title + ".mp3":
+            mp3_exists = True
 
-    download(f"https://www.youtube.com/watch?v={video_id}")
-
-    song_name = ""
-    files = os.listdir(".")
-    for file in files:
-        if file.endswith(".mp3"):
-            song_name = file
-            break
+    # Download mp3 if it doesn't exist
+    if not mp3_exists:
+        await interaction.followup.send(message_response + f"\nDownloading {video_title}...")
+        download(f"https://www.youtube.com/watch?v={video_id}")
+    else:
+        await interaction.followup.send(message_response + f"\nDownload skipped.")
     
-    # Play mp3
-    await interaction.channel.send(f"Playing {song_name.removesuffix('.mp3')}...")
-    interaction.guild.voice_client.play(source=discord.FFmpegPCMAudio(source=song_name))
+    # Add song to the queue
+    song_lengths.append(get_video_length(video_url))
+    song_queue.append(video_title)
+    await interaction.channel.send(f"Added {video_title} to the queue.")
 
 @bot.tree.command(name='stop')
 async def stop(interaction: discord.Interaction):
+    global timer
+    global song_queue
+    global song_lengths
+
     message_response = ""
+
+    song_queue = []
+    song_lengths = []
 
     if interaction.guild.voice_client:  # Check if bot is inside a voice channel
         if interaction.guild.voice_client.is_playing(): # Stop the player if it is playing something
@@ -107,6 +155,21 @@ async def stop(interaction: discord.Interaction):
     else:
         message_response = "Not connected to a voice channel."
 
+    # Delete all mp3 files
+    files = os.listdir(".")
+    for file in files:
+        if file.endswith(".mp3"):
+            os.remove(file)
+
+    timer.set() # Set the event to interrupt wait
+
     await interaction.response.send_message(message_response)
 
+playerThread = Thread(target=player)
+playerThread.start()
+
 bot.run(TOKEN)
+
+player_running = False
+
+playerThread.join()
