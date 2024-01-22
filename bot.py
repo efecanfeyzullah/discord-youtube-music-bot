@@ -195,7 +195,7 @@ async def queue(interaction: discord.Interaction):
         message_response += str(counter) + ". " + elem + "\n"
         counter += 1
 
-    await interaction.response.send_message("Current queue:\n" + message_response)
+    await interaction.response.send_message("```Current queue:\n" + message_response + "```")
 
 
 @bot.tree.command(name='play')
