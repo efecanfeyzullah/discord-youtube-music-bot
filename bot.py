@@ -5,7 +5,7 @@ from YouTubeToMP3.downloader import download
 import requests
 from pytube import YouTube
 from threading import Thread, Event
-import asyncio
+from time import sleep
 
 TOKEN = "NzY4ODI1NzkzOTA3MjYxNDcw.GFEgvD.cKJ2_HsuoIXr732_yTVoHp1VeB9ajO95ZHycE4"
 
@@ -33,8 +33,9 @@ def player():
             # Wait for it to finish
             if timer.wait(timeout=song_lengths[0] + 1): # Event is set
                 timer.clear()   # Clear the event to make it waitable
-            else:   # Timeout occured, go to next song
-                # Pop the played song
+
+            # Pop the played song
+            if len(song_queue) > 0: # Security check for stop functionality
                 previous_song = song_queue[0]
                 song_queue.pop(0)
                 song_lengths.pop(0)
@@ -87,8 +88,27 @@ async def leave(interaction: discord.Interaction):
     # Clear voice client
     voice_client = None
 
+@bot.tree.command(name='queue')
+async def queue(interaction: discord.Interaction):
+    global song_queue
+
+    if len(song_queue) == 0:
+        await interaction.response.send_message("Queue is empty.")
+        return
+
+    message_response = ""
+
+    counter = 1
+
+    for elem in song_queue:
+        message_response += str(counter) + ". " + elem + "\n"
+        counter += 1
+
+    await interaction.response.send_message("Current Queue:\n" + message_response)
+
+
 @bot.tree.command(name='play')
-async def play(interaction: discord.Interaction, q: str):
+async def play(interaction: discord.Interaction, search: str):
     global voice_client
 
     message_response = ""
@@ -97,11 +117,12 @@ async def play(interaction: discord.Interaction, q: str):
 
     # Join to channel if not joined
     if interaction.guild.voice_client == None:  # Check if not already connected
-        if interaction.user.voice.channel:  # Check if user is in a voice channel
+        if interaction.user.voice:  # Check if user is in a voice channel
             await interaction.user.voice.channel.connect()
             message_response = "Joined to " + interaction.user.voice.channel.name + "."
         else:
             message_response = "You must connect to a voice channel before using this command."
+            await interaction.followup.send(message_response)
             return
     
     # Set voice client
@@ -109,7 +130,7 @@ async def play(interaction: discord.Interaction, q: str):
 
     # Get video id and link
     API_URL = "https://youtube.googleapis.com/youtube/v3/"
-    query = q.replace(" ", "%20")
+    query = search.replace(" ", "%20")
     response = requests.get(f"{API_URL}search?q={query}&key=AIzaSyCHs90TcJXpXR-KZWYNXRLUKmBIEF0LO-8")
     video_id = response.json()["items"][0]["id"]["videoId"]
     video_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -134,6 +155,29 @@ async def play(interaction: discord.Interaction, q: str):
     song_lengths.append(get_video_length(video_url))
     song_queue.append(video_title)
     await interaction.channel.send(f"Added {video_title} to the queue.")
+
+@bot.tree.command(name='skip')
+async def skip(interaction: discord.Interaction):
+    global timer
+    global song_queue
+
+    message_response = ""
+
+    if interaction.guild.voice_client:  # Check if bot is inside a voice channel
+        if interaction.guild.voice_client.is_playing(): # Stop the player if it is playing something
+            interaction.guild.voice_client.stop()
+            message_response = f"Skipping {song_queue[0]}...\n"
+        else:
+            message_response = "Nothing to skip."
+    else:
+        await interaction.response.send_message("Not connected to a voice channel.")
+        return
+
+    sleep(1) # Wait for music to stop
+
+    timer.set() # Set the event to interrupt wait
+
+    await interaction.response.send_message(message_response)
 
 @bot.tree.command(name='stop')
 async def stop(interaction: discord.Interaction):
